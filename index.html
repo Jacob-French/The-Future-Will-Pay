@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Reader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300..600;1,7..72,300..600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0e0f11; --panel:#121317; --hover:#1a1b20; --line:#24252b;
+  --ink:#d5d0c6; --soft:#a09a90; --faint:#615e58; --lamp:#c9a56b;
+  --fs:19px; --lh:1.62;
+  --serif:"Literata","Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;overscroll-behavior:none}
+body{font-family:var(--serif);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;-webkit-tap-highlight-color:transparent}
+::selection{background:rgba(201,165,107,.28)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible{outline:1px solid var(--lamp);outline-offset:2px}
+
+/* ---------- chrome ---------- */
+#top,#bot{position:fixed;left:0;right:0;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;z-index:5;font-family:var(--sans);color:var(--faint);transition:opacity .5s}
+#top{top:0}
+#bot{bottom:0;justify-content:center;gap:20px;font-size:12px;letter-spacing:.06em;font-variant-numeric:tabular-nums}
+#where{position:absolute;left:50%;transform:translateX(-50%);max-width:calc(100vw - 130px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;letter-spacing:.2em;text-transform:uppercase}
+.ib{width:40px;height:40px;display:grid;place-items:center;border-radius:10px;color:var(--soft);transition:background .2s,color .2s}
+.ib:hover{background:var(--hover);color:var(--ink)}
+.ib svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+#pageno{min-width:9ch;text-align:center}
+#prog{position:fixed;left:0;bottom:0;height:2px;background:var(--lamp);opacity:.5;width:0;transition:width .45s;z-index:6}
+body.quiet #top,body.quiet #bot{opacity:.35}
+
+/* ---------- page stage ---------- */
+#stage{position:fixed;top:60px;bottom:60px;left:50%;overflow:hidden}
+#flow{height:100%;column-fill:auto;will-change:transform}
+#flow.anim{transition:transform .45s cubic-bezier(.22,.7,.2,1)}
+#flow p{margin:0;text-indent:1.4em;text-align:justify;hyphens:auto;-webkit-hyphens:auto;font-size:var(--fs);line-height:var(--lh);orphans:2;widows:2}
+#flow p.first,#flow .brk+p,#flow blockquote+p,#flow .sign+p,#flow h3+p{text-indent:0}
+#flow p.first::first-line{font-variant:small-caps;letter-spacing:.05em}
+#flow em{font-style:italic}
+#flow strong{font-weight:600}
+#flow .brk{text-align:center;color:var(--faint);font-size:calc(var(--fs)*.9);margin:1.1em 0;break-after:avoid}
+#flow h3{font-weight:400;font-size:calc(var(--fs)*.78);letter-spacing:.22em;text-transform:uppercase;color:var(--soft);text-align:center;margin:1.6em 0 1em;break-after:avoid}
+#flow blockquote{margin:1.2em 0;padding:0 0 0 1.1em;border-left:1px solid var(--line);color:var(--soft);font-size:calc(var(--fs)*.9);line-height:1.55;break-inside:avoid}
+#flow blockquote p{text-indent:0;font-size:inherit;line-height:inherit;text-align:left;hyphens:manual}
+#flow blockquote p+p{margin-top:.6em}
+#flow blockquote.epi{border:0;padding:0;margin:0 auto 2.6em;max-width:25em;font-style:italic;text-align:center}
+#flow blockquote.epi p{text-align:center}
+#flow blockquote.epi .attr{text-align:center}
+#flow .attr{display:block;text-align:right;font-style:normal;font-family:var(--sans);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-top:.9em}
+#flow .sign{text-align:center;font-family:var(--sans);font-size:calc(var(--fs)*.68);letter-spacing:.2em;text-transform:uppercase;color:var(--soft);line-height:1.9;margin:1.5em 0;break-inside:avoid}
+.head{text-align:center;padding-top:9vh;margin-bottom:2.4em;break-inside:avoid}
+.head .part{font-family:var(--sans);font-size:10.5px;letter-spacing:.32em;text-transform:uppercase;color:var(--faint);margin-bottom:2.6em}
+.head .num{font-family:var(--sans);font-size:11px;letter-spacing:.36em;text-transform:uppercase;color:var(--lamp)}
+.head h1{font-weight:300;font-size:calc(var(--fs)*1.9);line-height:1.2;margin:.45em 0 0;letter-spacing:.01em}
+.head .rule{width:36px;height:1px;background:var(--lamp);opacity:.55;margin:1.6em auto 0}
+.fin{text-align:center;color:var(--faint);font-family:var(--sans);font-size:11px;letter-spacing:.35em;text-transform:uppercase;padding-top:3em;break-inside:avoid}
+.fin .dot{width:7px;height:7px;border-radius:50%;background:var(--lamp);box-shadow:0 0 18px 4px rgba(201,165,107,.35);margin:0 auto 1.6em}
+
+/* ---------- panel ---------- */
+#scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .35s;z-index:20}
+#panel{position:fixed;top:0;bottom:0;left:0;width:min(370px,88vw);background:var(--panel);border-right:1px solid var(--line);transform:translateX(-102%);transition:transform .38s cubic-bezier(.22,.7,.2,1);z-index:21;display:flex;flex-direction:column;font-family:var(--sans)}
+body.open #panel{transform:none}
+body.open #scrim{opacity:1;pointer-events:auto}
+#panel .hd{padding:26px 22px 16px;border-bottom:1px solid var(--line)}
+#panel .bt{font-family:var(--serif);font-size:22px;font-weight:300;color:var(--ink);text-align:left}
+#panel .bs{font-size:12px;color:var(--faint);margin-top:4px}
+#panel .tools{display:flex;align-items:center;gap:6px;margin-top:14px;font-size:11px;color:var(--faint);letter-spacing:.08em}
+#panel .tools .ib{width:34px;height:30px;font-family:var(--serif);font-size:15px}
+#panel .tools .sp{flex:1}
+.vers{font-family:var(--sans);display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:12px;font-size:11px;color:var(--faint);letter-spacing:.08em}
+.vers .vl{margin-right:4px}
+.vers button{font-size:11px;letter-spacing:.08em;padding:5px 11px;border:1px solid var(--line);border-radius:999px;color:var(--soft);transition:all .2s}
+.vers button:hover{color:var(--ink);border-color:#3a3b42}
+.vers button.on{border-color:rgba(201,165,107,.6);color:var(--ink);background:rgba(201,165,107,.08)}
+.vnote{font-size:11.5px;line-height:1.45;color:var(--faint);margin-top:8px}
+#cover .vers{justify-content:center;margin-top:22px}
+#toc{overflow-y:auto;padding:4px 0 30px;flex:1;scrollbar-width:thin;scrollbar-color:#2a2b31 transparent}
+.tp{font-size:10.5px;letter-spacing:.28em;text-transform:uppercase;color:var(--faint);padding:24px 22px 8px}
+.tc{display:flex;align-items:baseline;gap:12px;width:100%;text-align:left;padding:9px 22px;color:var(--soft);transition:background .15s,color .15s}
+.tc:hover{background:var(--hover);color:var(--ink)}
+.tc .n{font-size:10.5px;color:var(--faint);min-width:22px;font-variant-numeric:tabular-nums}
+.tc .t{font-family:var(--serif);font-size:15.5px;line-height:1.35;flex:1}
+.tc .m{font-size:10.5px;color:var(--faint);white-space:nowrap}
+.tc.cur{color:var(--ink);background:rgba(201,165,107,.06)}
+.tc.cur .n{color:var(--lamp)}
+
+/* ---------- cover ---------- */
+#cover{position:fixed;inset:0;z-index:15;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:radial-gradient(ellipse at 50% 36%,#1b1710 0%,#121210 30%,var(--bg) 65%);transition:opacity .7s}
+#cover.gone{opacity:0;pointer-events:none}
+#cover .lamp{width:10px;height:10px;border-radius:50%;background:var(--lamp);box-shadow:0 0 40px 12px rgba(201,165,107,.28);margin-bottom:46px;animation:breathe 6s ease-in-out infinite}
+@keyframes breathe{50%{box-shadow:0 0 60px 18px rgba(201,165,107,.18)}}
+#cover h1{font-weight:300;font-size:clamp(36px,7.5vw,68px);letter-spacing:.03em;margin:0;line-height:1.1}
+#cover .sub{font-style:italic;color:var(--soft);margin-top:18px;font-size:clamp(15px,2.2vw,18px);max-width:34em}
+#cover .by{font-family:var(--sans);font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--faint);margin-top:26px}
+#cover .acts{display:flex;gap:12px;margin-top:54px;flex-wrap:wrap;justify-content:center}
+#cover .acts button{font-family:var(--sans);font-size:12px;letter-spacing:.18em;text-transform:uppercase;padding:13px 22px;border:1px solid var(--line);border-radius:999px;color:var(--soft);transition:all .25s}
+#cover .acts button:hover{border-color:var(--lamp);color:var(--ink)}
+#cover .acts button.pri{border-color:rgba(201,165,107,.45);color:var(--ink)}
+#cover .hint{position:absolute;bottom:22px;font-family:var(--sans);font-size:11px;color:var(--faint);letter-spacing:.06em}
+#empty{position:fixed;inset:0;display:none;place-items:center;color:var(--soft);font-family:var(--sans);text-align:center;padding:30px}
+
+@media (max-width:600px){
+  :root{--fs:18px}
+  #stage{top:54px;bottom:54px}
+  .head{padding-top:5vh}
+}
+</style>
+</head>
+<body class="quiet">
+
+<div id="top">
+  <button class="ib" id="menuBtn" aria-label="Chapters (C)" title="Chapters (C)">
+    <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+  </button>
+  <div id="where"></div>
+  <button class="ib" id="coverBtn" aria-label="Title page" title="Title page">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.2"/><circle cx="12" cy="12" r="7" opacity=".45"/></svg>
+  </button>
+</div>
+
+<div id="stage"><div id="flow"></div></div>
+
+<div id="bot">
+  <button class="ib" id="prevBtn" aria-label="Previous page">
+    <svg viewBox="0 0 24 24"><path d="M14.5 6l-6 6 6 6"/></svg>
+  </button>
+  <div id="pageno"></div>
+  <button class="ib" id="nextBtn" aria-label="Next page">
+    <svg viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
+  </button>
+</div>
+<div id="prog"></div>
+
+<div id="scrim"></div>
+<nav id="panel" aria-label="Chapters">
+  <div class="hd">
+    <button class="bt" id="panelTitle"></button>
+    <div class="bs" id="panelSub"></div>
+    <div class="tools">
+      <span>Text</span>
+      <button class="ib" id="smaller" aria-label="Smaller text">A−</button>
+      <button class="ib" id="larger" aria-label="Larger text">A+</button>
+      <span class="sp"></span>
+      <span id="bookPct"></span>
+    </div>
+    <div class="vers" id="pVers"></div>
+    <div class="vnote" id="pNote"></div>
+  </div>
+  <div id="toc"></div>
+</nav>
+
+<div id="cover">
+  <div class="lamp"></div>
+  <h1 id="cTitle"></h1>
+  <div class="sub" id="cSub"></div>
+  <div class="by" id="cBy"></div>
+  <div class="acts" id="cActs"></div>
+  <div class="vers" id="cVers"></div>
+  <div class="hint">← → or swipe to turn pages · C for chapters</div>
+</div>
+<div id="empty">No chapters found.<br>Add Markdown files to <code>versions/v1/</code> and run <code>python3 build.py</code>.</div>
+
+<script src="story.js"></script>
+<script>
+(function(){
+  "use strict";
+  var S = window.STORY || {title:"Untitled", chapters:[]};
+  var V = (S.versions && S.versions.length) ? S.versions : [{id:"v1", label:"", note:"", chapters:S.chapters || []}];
+  var $ = function(id){ return document.getElementById(id); };
+  var flow = $("flow"), stage = $("stage"), body = document.body;
+  var BASE = "reader:" + (S.title || "book");
+
+  /* settings (text size, chosen version) live under BASE; reading position is kept per version */
+  function getK(k){ try { return JSON.parse(localStorage.getItem(k)) || {}; } catch(e){ return {}; } }
+  function setK(k, o){ try { var s = getK(k); for (var x in o) s[x] = o[x]; localStorage.setItem(k, JSON.stringify(s)); } catch(e){} }
+  function findV(id){ for (var i = 0; i < V.length; i++) if (V[i].id === id) return V[i]; return null; }
+
+  var st = getK(BASE);
+  /* older reader saved one position for the whole book: that was the original text, so keep it as v1's */
+  if (st.ch != null && findV("v1") && !localStorage.getItem(BASE + ":v1")){ setK(BASE + ":v1", {ch: st.ch, frac: st.frac || 0}); }
+
+  var hm = /^#(?:(v[\w.-]+)-)?ch(\d+)$/.exec(location.hash);
+  var cur = (hm && hm[1] && findV(hm[1])) || findV(st.ver) || findV(S.defaultVersion) || V[V.length - 1];
+  var C = cur.chapters || [];
+  function KEY(){ return BASE + ":" + cur.id; }
+  function load(){ return getK(KEY()); }
+  function save(o){ setK(KEY(), o); }
+
+  document.title = S.title || "Reader";
+  if (!C.length){ $("empty").style.display = "grid"; $("cover").classList.add("gone"); return; }
+
+  var fs = st.fs || (window.innerWidth < 600 ? 18 : 19);
+  var ch = 0, page = 0, pages = 1, pw = 0, gap = 0;
+  var total = 0, before = [];
+  function tally(){ total = 0; before = []; C.forEach(function(c, i){ before[i] = total; total += Math.max(1, c.words || 0); }); }
+  tally();
+  function vname(v){ return v.id + (v.label ? " · " + v.label : ""); }
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(m){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]; }); }
+  function mins(w){ var m = Math.max(1, Math.round(w / 230)); return m < 60 ? m + " min" : (Math.floor(m/60) + " h " + (m%60 ? m%60 + " m" : "")); }
+
+  /* ---------- layout ---------- */
+  function geometry(){
+    document.documentElement.style.setProperty("--fs", fs + "px");
+    var vw = window.innerWidth;
+    var gutter = vw < 600 ? 22 : 44;
+    pw = Math.floor(Math.min(fs * 34, vw - gutter * 2));
+    gap = gutter * 2;
+    stage.style.width = pw + "px";
+    stage.style.marginLeft = (-pw / 2) + "px";
+    flow.style.width = pw + "px";
+    flow.style.columnWidth = pw + "px";
+    flow.style.columnGap = gap + "px";
+  }
+  function measure(){
+    pages = Math.max(1, Math.round((flow.scrollWidth + gap) / (pw + gap)));
+  }
+  function renderChapter(i){
+    var c = C[i], h = '<header class="head">';
+    if (c.partStart && c.part) h += '<div class="part">' + esc(c.part) + '</div>';
+    h += '<div class="num">' + esc(c.label) + '</div><h1>' + esc(c.title) + '</h1><div class="rule"></div></header>';
+    var tail = i === C.length - 1 ? '<div class="fin"><div class="dot"></div>The End</div>' : '';
+    flow.innerHTML = h + c.html + tail;
+  }
+  function frac(){ return pages > 1 ? page / (pages - 1) : 0; }
+
+  function paint(anim){
+    flow.classList.toggle("anim", !!anim);
+    flow.style.transform = "translate3d(" + (-page * (pw + gap)) + "px,0,0)";
+    var c = C[ch];
+    $("where").textContent = (V.length > 1 ? cur.id + " · " : "") + c.label + " · " + c.title;
+    $("pageno").textContent = (page + 1) + " / " + pages;
+    var p = (before[ch] + (pages > 1 ? (page + 1) / pages : 1) * Math.max(1, c.words || 0)) / total;
+    $("prog").style.width = (p * 100).toFixed(2) + "%";
+    $("bookPct").textContent = Math.round(p * 100) + "% of book";
+    var items = document.querySelectorAll(".tc");
+    for (var k = 0; k < items.length; k++) items[k].classList.toggle("cur", +items[k].dataset.i === ch);
+    save({ ch: ch, frac: frac() });
+    try { history.replaceState(null, "", "#" + (V.length > 1 ? cur.id + "-" : "") + "ch" + (ch + 1)); } catch(e){}
+  }
+
+  function openChapter(i, where, fade){
+    ch = Math.max(0, Math.min(C.length - 1, i));
+    renderChapter(ch);
+    measure();
+    if (where === "end") page = pages - 1;
+    else if (typeof where === "number") page = Math.round(where * (pages - 1));
+    else page = 0;
+    paint(false);
+    if (fade && stage.animate) stage.animate([{opacity:0},{opacity:1}], {duration:420, easing:"ease-out"});
+  }
+  function relayout(){
+    var f = frac();
+    geometry(); measure();
+    page = Math.round(f * (pages - 1));
+    paint(false);
+  }
+
+  /* ---------- movement ---------- */
+  function next(){
+    if (page < pages - 1){ page++; paint(true); }
+    else if (ch < C.length - 1) openChapter(ch + 1, 0, true);
+  }
+  function prev(){
+    if (page > 0){ page--; paint(true); }
+    else if (ch > 0) openChapter(ch - 1, "end", true);
+  }
+
+  /* ---------- panel / cover ---------- */
+  function buildToc(){
+    var h = "", lastPart = null;
+    C.forEach(function(c, i){
+      if (c.part && c.part !== lastPart){ h += '<div class="tp">' + esc(c.part) + '</div>'; lastPart = c.part; }
+      var n = /^Chapter (\d+)$/.exec(c.label);
+      h += '<button class="tc" data-i="' + i + '"><span class="n">' + (n ? n[1] : "·") + '</span><span class="t">' +
+           esc(n ? c.title : c.label + ": " + c.title) + '</span><span class="m">' + mins(c.words || 0) + '</span></button>';
+    });
+    $("toc").innerHTML = h;
+    $("panelTitle").textContent = S.title || "";
+    $("panelSub").textContent = C.length + " chapters · about " + mins(total) + " of reading";
+    buildVers();
+  }
+  function versHtml(){
+    if (V.length < 2) return "";
+    var h = '<span class="vl">Version</span>';
+    V.forEach(function(v){ h += '<button data-v="' + esc(v.id) + '" class="' + (v.id === cur.id ? "on" : "") + '" title="' + esc(v.note || "") + '">' + esc(vname(v)) + '</button>'; });
+    return h;
+  }
+  function buildVers(){
+    $("pVers").innerHTML = versHtml();
+    $("cVers").innerHTML = versHtml();
+    $("pNote").textContent = V.length > 1 ? (cur.note || "") : "";
+  }
+  /* switch version; from the panel we stay on the same chapter and place, so the two can be compared */
+  function setVersion(id, keepPlace){
+    var nv = findV(id); if (!nv || nv === cur) return;
+    var file = C[ch] && C[ch].file, f = frac();
+    save({ ch: ch, frac: f });
+    cur = nv; C = cur.chapters || []; setK(BASE, {ver: cur.id});
+    tally(); buildToc();
+    var s = load(), i = -1;
+    if (keepPlace){ for (var k = 0; k < C.length; k++) if (C[k].file === file) { i = k; break; } }
+    if (i >= 0) openChapter(i, f, true);
+    else openChapter(s.ch || 0, s.frac || 0, true);
+  }
+  function versClick(e){
+    var b = e.target.closest("button[data-v]"); if (!b) return;
+    e.stopPropagation();
+    setVersion(b.dataset.v, !coverShown());
+    if (coverShown()) showCover();
+  }
+  function isOpen(){ return body.classList.contains("open"); }
+  function setPanel(on){
+    body.classList.toggle("open", on);
+    if (on){ var el = document.querySelector(".tc.cur"); if (el) el.scrollIntoView({block:"center"}); }
+  }
+  function coverShown(){ return !$("cover").classList.contains("gone"); }
+  function showCover(){
+    setPanel(false);
+    var s = load(), a = "";
+    if (s.ch || s.frac) a += '<button class="pri" data-go="cont">Continue · ' + esc(C[s.ch || 0].label) + '</button><button data-go="start">Start over</button>';
+    else a += '<button class="pri" data-go="start">Begin</button>';
+    $("cActs").innerHTML = a;
+    $("cover").classList.remove("gone");
+  }
+  function hideCover(){ $("cover").classList.add("gone"); }
+
+  $("pVers").addEventListener("click", versClick);
+  $("cVers").addEventListener("click", versClick);
+  $("cTitle").textContent = S.title || "";
+  $("cSub").textContent = S.subtitle || "";
+  $("cBy").textContent = S.author || "";
+  $("cActs").addEventListener("click", function(e){
+    var b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.go === "start") openChapter(0, 0, true);
+    hideCover();
+  });
+  $("toc").addEventListener("click", function(e){
+    var b = e.target.closest(".tc"); if (!b) return;
+    openChapter(+b.dataset.i, 0, true); setPanel(false); hideCover();
+  });
+  $("menuBtn").onclick = function(){ setPanel(!isOpen()); };
+  $("scrim").onclick = function(){ setPanel(false); };
+  $("coverBtn").onclick = showCover;
+  $("panelTitle").onclick = showCover;
+  $("prevBtn").onclick = prev;
+  $("nextBtn").onclick = next;
+  $("smaller").onclick = function(){ fs = Math.max(14, fs - 1); setK(BASE, {fs:fs}); relayout(); };
+  $("larger").onclick = function(){ fs = Math.min(28, fs + 1); setK(BASE, {fs:fs}); relayout(); };
+
+  /* ---------- input ---------- */
+  document.addEventListener("keydown", function(e){
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var k = e.key;
+    if (coverShown()){
+      if (k === "Enter" || k === " " || k === "ArrowRight"){ e.preventDefault(); var b = document.querySelector("#cActs .pri"); if (b) b.click(); }
+      return;
+    }
+    if (k === "Escape"){ setPanel(false); return; }
+    if (k === "c" || k === "C" || k === "m"){ setPanel(!isOpen()); return; }
+    if (isOpen()) return;
+    if (k === "ArrowRight" || k === "PageDown" || (k === " " && !e.shiftKey)){ e.preventDefault(); next(); }
+    else if (k === "ArrowLeft" || k === "PageUp" || (k === " " && e.shiftKey)){ e.preventDefault(); prev(); }
+    else if (k === "Home"){ page = 0; paint(true); }
+    else if (k === "End"){ page = pages - 1; paint(true); }
+  });
+
+  var swiped = false;
+  document.addEventListener("click", function(e){
+    if (swiped || coverShown() || isOpen()) return;
+    if (e.target.closest("button,a,#panel,#top,#bot")) return;
+    if (String(window.getSelection ? window.getSelection() : "").length) return;
+    (e.clientX / window.innerWidth) < 0.33 ? prev() : next();
+  });
+
+  var tx = null, ty = 0;
+  document.addEventListener("touchstart", function(e){ var t = e.touches[0]; tx = t.clientX; ty = t.clientY; }, {passive:true});
+  document.addEventListener("touchend", function(e){
+    if (tx === null || coverShown() || isOpen()) { tx = null; return; }
+    var t = e.changedTouches[0], dx = t.clientX - tx, dy = t.clientY - ty; tx = null;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.2){
+      dx < 0 ? next() : prev();
+      swiped = true; setTimeout(function(){ swiped = false; }, 450);
+    }
+  }, {passive:true});
+
+  var wheelAt = 0;
+  document.addEventListener("wheel", function(e){
+    if (coverShown() || isOpen()) return;
+    var d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (Math.abs(d) < 14) return;
+    var now = Date.now();
+    if (now - wheelAt < 600){ wheelAt = now; return; }
+    wheelAt = now;
+    d > 0 ? next() : prev();
+  }, {passive:true});
+
+  var idle;
+  document.addEventListener("mousemove", function(){
+    body.classList.remove("quiet"); clearTimeout(idle);
+    idle = setTimeout(function(){ body.classList.add("quiet"); }, 2200);
+  });
+
+  var rt;
+  window.addEventListener("resize", function(){ clearTimeout(rt); rt = setTimeout(relayout, 140); });
+
+  /* ---------- start ---------- */
+  buildToc();
+  geometry();
+  var ps = load();
+  setK(BASE, {ver: cur.id});
+  if (hm){ openChapter(+hm[2] - 1, ps.ch === +hm[2] - 1 ? (ps.frac || 0) : 0); hideCover(); }
+  else { openChapter(ps.ch || 0, ps.frac || 0); showCover(); }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
+})();
+</script>
+</body>
+</html>
